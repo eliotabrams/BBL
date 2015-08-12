@@ -13,7 +13,8 @@ NUM_TRUCKS = 3
 COUNT_OF_EMPTY_STATES_REACHED = 0
 
 # Sympy Variables (WOULD LIKE TO FIND A CLEANER WAY OF DECLARING AND
-# STORING THESE)
+# STORING THESE) These are not all used yet, but will come in handy when I 
+# Update the profit function to include interactions
 
 # Intercept
 intercept = sp.Symbol('intercept')
@@ -33,7 +34,6 @@ q1 = sp.Symbol('q1')
 q2 = sp.Symbol('q2')
 q3 = sp.Symbol('q3')
 q4 = sp.Symbol('q4')
-
 quarters = [q1, q2, q3, q4]
 
 # Locations
@@ -46,7 +46,7 @@ locations = pd.DataFrame(
     [locationA, locationB, locationC, locationO]).transpose()
 locations.columns = ['A', 'B', 'C', 'O']
 
-# Other variables
+# Main variables
 high_historic_count = sp.Symbol('high_historic_count')
 high_historic_diversity = sp.Symbol('high_historic_diversity')
 high_historic_freq = sp.Symbol('high_historic_freq')
@@ -57,9 +57,8 @@ high_current_diversity = sp.Symbol('high_current_diversity')
 # Create state as a vector (indicating location) storing an array (holding
 # the variable values).
 def make_states(location_data, making_probabilities, truck_types):
-    """Function takes a dataset with Truck, Location, and Date (as a datetime variable)
-
-    location_data = table with locations
+    """
+    Takes DataFrame with Truck, Location, and Date and returns DataFrame with created states and also state variables
     """
 
     # Complete panel if making the probabilities from the original location
@@ -143,7 +142,6 @@ def make_states(location_data, making_probabilities, truck_types):
     # Concatenate the created variables into a single state variable
     location_data = location_data.reindex_axis(
         sorted(location_data.columns), axis=1)
-
     state_variables = location_data.columns.tolist()
     state_variables.remove('Truck')
     state_variables.remove('Date')
@@ -151,9 +149,8 @@ def make_states(location_data, making_probabilities, truck_types):
     state_variables.remove('Type')
     state_variables.remove('Year_Plus_Week')
 
-    # Turning this into a dictionary isn't so neat... seems like storing dictionaries in a dataframe is recommended against
-    # temp = joint_state_variables.to_dict(orient='records')
-    # [OrderedDict(row) for i, row in df.iterrows()]
+    # Store state as a tuple
+    # Potentially redo to store state as a dictionary, but not a simple change and benefits unclear
     location_data['State'] = location_data[state_variables].values.tolist()
     location_data.State = location_data.State.apply(tuple)
 
@@ -162,6 +159,9 @@ def make_states(location_data, making_probabilities, truck_types):
 
 # Calculate P(a_{it} | s_t) (WILL NEED TO REDO WITH A SEIVE LOGIT)
 def find_probabilities(cleaned_location_data):
+    """
+    Takes DataFrame with Truck, Location, Date, and State and returns DataFrame with action probabilities
+    """
 
     # Find the number of times that each truck takes each action for each state
     numerator = cleaned_location_data.groupby(
@@ -181,7 +181,9 @@ def find_probabilities(cleaned_location_data):
 
 # Find vector of optimal action from probability list and state
 def optimal_action(probability_list, state, truck_types):
-    "Find optimal action from probability list, state, and truck id"
+    """
+    Find optimal actions for the trucks at the given state from the Probability DataFrame
+    """
 
     # If the state is not present in the historic data then generate random
     # actions for the trucks
@@ -207,7 +209,9 @@ def optimal_action(probability_list, state, truck_types):
 # Find other action (as a function of the state and the strategy or build
 # one for each strategy)
 def generate_random_actions(truck_types):
-    ""
+    """
+    Find random actions for the trucks
+    """
 
     # Create a table with all possible actions for all trucks
     action_profile = truck_types.drop('Type', axis=1)
@@ -230,7 +234,9 @@ def generate_random_actions(truck_types):
 
 
 def generate_certain_actions(certain_action, truck_types):
-    ""
+    """
+    Returns table with specified action for trucks
+    """
 
     action_profile = truck_types.drop('Type', axis=1)
     action_profile['Location'] = certain_action
@@ -240,9 +246,12 @@ def generate_certain_actions(certain_action, truck_types):
     return action_profile
 
 
-# Calculate profit given current state and action profile WOULD REALLY
-# LIKE TO GENERALIZE
+# Calculate profit given current state and action profile 
+# This function is specific to the food truck location application
 def get_profit(location, truck, shock, df, current_variables, truck_types):
+"""
+Builds the period profit vector for a truck
+"""
 
     # Add intercept, day of week indicator, quarter indicator, and shock. Day
     # of week is fed in as a 0-6, but quarter is fed in as 1-4 hence the
@@ -267,10 +276,14 @@ def get_profit(location, truck, shock, df, current_variables, truck_types):
 
     return profit
 
-
+# Builds the current period variables and runs the get_profit() vector for each of the trucks
+# This function is currently specific to the food truck location application
+# But could be made more general. Also, it would be nice to do the discretizing
+# Of the current period variables through a call to another function
 def create_profit_vector(state_variables, state, actions, truck_types):
-    "Calculate profit given current state and action profile"
-
+"""
+Creates the current period variables and then calls get_profit() for each truck
+"""
     # Put into data frame
     df = pd.DataFrame([state]).applymap(int)
     df.columns = state_variables
@@ -292,7 +305,9 @@ def create_profit_vector(state_variables, state, actions, truck_types):
 
 # Update state
 def update_state(state, action_sequence, Date, state_variables, truck_types):
-    "Take the current state and recent history of actions and return the new state (clearing out the action sequence as necessary)"
+    """
+    Take the current state and recent history of actions and return the new state (clearing out the action sequence as necessary)
+    """
 
     # If its the first day of the week, return the new state based on the
     # actions from the previous week and reset the sequence of actions that
@@ -304,8 +319,7 @@ def update_state(state, action_sequence, Date, state_variables, truck_types):
         Content = pd.DataFrame([Values.State[0]])
         Content.columns = Labels
 
-        Container = pd.DataFrame([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-                                  0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]).transpose()
+        Container = pd.DataFrame(np.zeros(len(state_variables))).transpose()
         Container.columns = state_variables
 
         new_state = tuple(pd.concat([Container, Content]).fillna(0).iloc[[1]].values[0])
@@ -326,13 +340,13 @@ def update_state(state, action_sequence, Date, state_variables, truck_types):
     return [new_state, action_sequence]
 
 
-# Simulate a single path. ERROR: The first monday is not properly
-# generating a variable... could be because I'm starting with a non-legit
-# state
+# Simulate a single path
 def simulate_single_path(probabilities, starting_state, starting_date,
                          periods, discount, state_variables, truck_id,
                          action_generator, specific_action, truck_types):
-    ""
+    """
+    Simulate a single path of actions for a truck and return the value function experienced
+    """
 
     # Set the initial values
     global NUM_TRUCKS
@@ -383,14 +397,14 @@ def simulate_single_path(probabilities, starting_state, starting_date,
     return pd.DataFrame([period_profits.Truck, pdv_profits]).transpose()
 
 
-# Average over N simulations of the valuation function and (currently)
-# return only for single truck. This functions return is a bit unorthodox
-# but significantly reduces calculations necessary. Could potential write
-# a separate function to pick out specific truck
+# Average over N simulations of the valuation function
+# Merely performs a loop
 def find_value_function(probabilities, starting_state, starting_date, periods,
                         discount, state_variables, truck_id, action_generator,
                         specific_action, N, truck_types):
-    ""
+    """
+    Average over N simulations of the valuation function
+    """
 
     global NUM_TRUCKS
 
@@ -412,33 +426,47 @@ def find_value_function(probabilities, starting_state, starting_date, periods,
     return Step_One[Step_One.Truck == truck_id].Profit.get_values()[0]
 
 
-# Build objective to maximize
-def build_g(probabilities, starting_date, periods, discount, state_variables, N, truck_types, num_draws):
+# Build the terms that go into the objective to the maximization problem
+def build_g(probabilities, periods, discount, state_variables, N, truck_types, num_draws):
+    """
+    Randomly choose num_draws of inequalities to use and estimate the relevant value functions
+    """
 
-    # Create column with truck and strategy and starting state
+    # Create columns with truck
     container_table = truck_types.drop('Type', axis=1)
 
+    # Interact trucks with alternative strategies being considered
     temp1 = pd.DataFrame(['Random'], columns=['action_generator'])
     temp2 = pd.DataFrame(list(locations.columns), columns=['specific_action'])
     temp2['action_generator'] = 'Specific'
     temp2 = temp2.append(temp1)
-
     container_table['key'] = 1
     temp2['key'] = 1
     container_table = pd.merge(container_table, temp2, on='key').ix[
         :, ('Truck', 'action_generator', 'specific_action')]
     container_table = container_table.fillna('')
 
-
+    # Interact trucks and alternative strategies with all possible starting states
+    # Being given positive weight
     container_table['key'] = 1
     states = pd.DataFrame(probabilities[probabilities.Truck == 1].State)
     states['key'] = 1
     container_table = pd.merge(container_table, states, on='key').drop('key', axis=1)
     container_table = container_table.sample(num_draws)
 
+    # Create starting date appropriate for starting states day of week and quarter
+    # By randomly drawing from the possibilities
+    dates = pd.date_range(start='1/1/2011', end='12/31/2011', freq='D')
+    container_table['starting_date'] = container_table.State.apply(
+                                    lambda row: pd.DataFrame(
+                                        dates[(dates.quarter == row[state_variables.index('Quarter')]) 
+                                        & (dates.dayofweek == row[state_variables.index('Day_Of_Week')] 
+                                        )]).sample(1)[0].apply(str).values[0][:10])
+
+    # Estimate the value functions
     container_table['Value_Function_For_Other_Actions'] = container_table.apply(lambda row:
                     find_value_function(probabilities=probabilities, starting_state=row['State'],
-                                        starting_date=starting_date, periods=periods, discount=discount,
+                                        starting_date=row['starting_date'], periods=periods, discount=discount,
                                         state_variables=state_variables, truck_id=row['Truck'],
                                         action_generator=row['action_generator'],
                                         specific_action=row['specific_action'],
@@ -446,12 +474,13 @@ def build_g(probabilities, starting_date, periods, discount, state_variables, N,
 
     container_table['Value_Function'] = container_table.apply(lambda row:
                     find_value_function(probabilities=probabilities, starting_state=row['State'],
-                                        starting_date=starting_date, periods=periods, discount=discount,
+                                        starting_date=row['starting_date'], periods=periods, discount=discount,
                                         state_variables=state_variables, truck_id=row['Truck'],
                                         action_generator='Optimal',
                                         specific_action='',
                                         N=N, truck_types=truck_types), axis=1)
 
+    # Form the relevant differences
     container_table['g'] = container_table.Value_Function - \
         container_table.Value_Function_For_Other_Actions
 
@@ -461,16 +490,24 @@ def build_g(probabilities, starting_date, periods, discount, state_variables, N,
 # Estimate the parameters by maximizing the objective (later add a
 # weighting vector)
 def optimize(g):
+    """
+    Find parameters by optimizing over the given table of estimated inequalities
+    """
+
+    # Build the objective
     g['Terms'] = g.apply(lambda row: sp.Min(row.g, 0) ** 2, axis=1)
     objective = g.Terms.sum()
     variables = list(objective.atoms(sp.Symbol))
 
+    # Turn the objective into a function
     def function(values):
         z = zip(variables, values)
         return float(objective.subs(z))
 
+    # Create the intial guess
     initial_guess = np.ones(len(variables))
 
+    # Optimize!
     return [opt.minimize(function, initial_guess, method='nelder-mead'), variables]
 
 
