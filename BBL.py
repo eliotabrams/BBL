@@ -1,6 +1,8 @@
 # Eliot Abrams
 # Food truck location choice
 
+# Code sets up the BBL environment
+
 # Packages
 import pandas as pd
 import numpy as np
@@ -8,13 +10,12 @@ import sympy as sp
 import datetime as dt
 import scipy.optimize as opt
 
-# Constants
-NUM_TRUCKS = 3
+# Constants (These will be removed)
 COUNT_OF_EMPTY_STATES_REACHED = 0
 
 # Sympy Variables (WOULD LIKE TO FIND A CLEANER WAY OF DECLARING AND
 # STORING THESE) These are not all used yet, but will come in handy when I 
-# Update the profit function to include interactions
+# update the profit function to include interactions
 
 # Intercept
 intercept = sp.Symbol('intercept')
@@ -41,7 +42,6 @@ locationA = sp.Symbol('locationA')
 locationB = sp.Symbol('locationB')
 locationC = sp.Symbol('locationC')
 locationO = sp.Symbol('locationO')
-
 locations = pd.DataFrame(
     [locationA, locationB, locationC, locationO]).transpose()
 locations.columns = ['A', 'B', 'C', 'O']
@@ -54,8 +54,7 @@ high_current_count = sp.Symbol('high_current_count')
 high_current_diversity = sp.Symbol('high_current_diversity')
 
 
-# Create state as a vector (indicating location) storing an array (holding
-# the variable values).
+# Create states as a tuple and add as a column to the input location data 
 def make_states(location_data, making_probabilities, truck_types):
     """
     Takes DataFrame with Truck, Location, and Date and returns DataFrame with created states and also state variables
@@ -72,7 +71,7 @@ def make_states(location_data, making_probabilities, truck_types):
     # Merge on truck types
     location_data = pd.merge(location_data, truck_types, on='Truck')
 
-    # Create time variables
+    # Create time variables (most of the state variables are at the week level)
     location_data['Date'] = pd.to_datetime(location_data['Date'])
     location_data['Year_Plus_Week'] = location_data['Date'].dt.week + location_data['Date'].dt.year
     location_data['Day_Of_Week'] = location_data['Date'].dt.dayofweek
@@ -92,7 +91,7 @@ def make_states(location_data, making_probabilities, truck_types):
     joint_state_variables.columns = pd.Index(
         [e[0] + e[1] for e in joint_state_variables.columns.tolist()])
 
-    # Discretize the values (turn into dummy variables for now)
+    # Discretize the values (turn into dummy variables for now). Do in seperate function later!
     joint_state_variables[joint_state_variables.ix[
         :, joint_state_variables.columns != 'Year_Plus_Week'] <= 4] = 0
     joint_state_variables[joint_state_variables.ix[
@@ -103,7 +102,7 @@ def make_states(location_data, making_probabilities, truck_types):
     truck_specific_state_variables = location_data.groupby(['Truck', 'Year_Plus_Week', 'Location'])['Date'].count(
     ).reset_index(['Truck', 'Location', 'Year_Plus_Week']).rename(columns={'Date': 'Truck_Weekly_Frequency'})
 
-    # Create container table table
+    # Create container table table (to ensure that all truck location combinations are present)
     container_table = truck_types.drop('Type', axis=1)
     temp = pd.DataFrame(list(locations.columns), columns=['Location'])
     container_table['key'] = 1
@@ -111,6 +110,7 @@ def make_states(location_data, making_probabilities, truck_types):
     container_table = pd.merge(
         container_table, temp, on='key').ix[:, ('Truck', 'Location')]
 
+    # Finish the pivot table
     truck_specific_state_variables = truck_specific_state_variables.append(container_table).fillna(0)
     historic_truck_frequencies = pd.pivot_table(truck_specific_state_variables,
                                                 values='Truck_Weekly_Frequency',
@@ -122,7 +122,7 @@ def make_states(location_data, making_probabilities, truck_types):
     historic_truck_frequencies.columns = pd.Index(
         [e[0] + str(e[1]) for e in historic_truck_frequencies.columns.tolist()])
 
-    # Discretize the values (turn into dummy variables for now)
+    # Discretize the values (turn into dummy variables for now). Do in separate function later!
     historic_truck_frequencies[historic_truck_frequencies.ix[
         :, historic_truck_frequencies.columns != 'Year_Plus_Week'] > 0] = 1
 
@@ -206,8 +206,8 @@ def optimal_action(probability_list, state, truck_types):
 
     return action_profile.sort('Truck')
 
-# Find other action (as a function of the state and the strategy or build
-# one for each strategy)
+
+# Find other actions (for now just enable acting randomly and acting certainly)
 def generate_random_actions(truck_types):
     """
     Find random actions for the trucks
@@ -249,9 +249,9 @@ def generate_certain_actions(certain_action, truck_types):
 # Calculate profit given current state and action profile 
 # This function is specific to the food truck location application
 def get_profit(location, truck, shock, df, current_variables, truck_types):
-"""
-Builds the period profit vector for a truck
-"""
+    """
+    Builds the period profit vector for a truck
+    """
 
     # Add intercept, day of week indicator, quarter indicator, and shock. Day
     # of week is fed in as a 0-6, but quarter is fed in as 1-4 hence the
@@ -276,14 +276,16 @@ Builds the period profit vector for a truck
 
     return profit
 
+
 # Builds the current period variables and runs the get_profit() vector for each of the trucks
-# This function is currently specific to the food truck location application
-# But could be made more general. Also, it would be nice to do the discretizing
-# Of the current period variables through a call to another function
+# this function is currently specific to the food truck location application
+# but could be made more general. Also, it would be nice to do the discretizing
+# of the current period variables through a call to another function
 def create_profit_vector(state_variables, state, actions, truck_types):
-"""
-Creates the current period variables and then calls get_profit() for each truck
-"""
+    """
+    Creates the current period variables and then calls get_profit() for each truck
+    """
+
     # Put into data frame
     df = pd.DataFrame([state]).applymap(int)
     df.columns = state_variables
@@ -349,11 +351,10 @@ def simulate_single_path(probabilities, starting_state, starting_date,
     """
 
     # Set the initial values
-    global NUM_TRUCKS
     current_date = dt.datetime.strptime(starting_date, '%Y-%m-%d')
     current_state = starting_state
     T = 0
-    pdv_profits = np.zeros(NUM_TRUCKS)
+    pdv_profits = np.zeros(len(truck_types))
     action_sequence = pd.DataFrame()
 
     while T < periods:
@@ -398,7 +399,7 @@ def simulate_single_path(probabilities, starting_state, starting_date,
 
 
 # Average over N simulations of the valuation function
-# Merely performs a loop
+# Could combine with the above function if there are efficiency improvements
 def find_value_function(probabilities, starting_state, starting_date, periods,
                         discount, state_variables, truck_id, action_generator,
                         specific_action, N, truck_types):
@@ -406,10 +407,8 @@ def find_value_function(probabilities, starting_state, starting_date, periods,
     Average over N simulations of the valuation function
     """
 
-    global NUM_TRUCKS
-
     # Set initial values
-    value_functions = np.zeros(NUM_TRUCKS)
+    value_functions = np.zeros(len(truck_types))
 
     # Run N times
     for x in xrange(N):
@@ -447,7 +446,7 @@ def build_g(probabilities, periods, discount, state_variables, N, truck_types, n
     container_table = container_table.fillna('')
 
     # Interact trucks and alternative strategies with all possible starting states
-    # Being given positive weight
+    # being given positive weight
     container_table['key'] = 1
     states = pd.DataFrame(probabilities[probabilities.Truck == 1].State)
     states['key'] = 1
@@ -455,7 +454,7 @@ def build_g(probabilities, periods, discount, state_variables, N, truck_types, n
     container_table = container_table.sample(num_draws)
 
     # Create starting date appropriate for starting states day of week and quarter
-    # By randomly drawing from the possibilities
+    # by randomly drawing from the possibilities
     dates = pd.date_range(start='1/1/2011', end='12/31/2011', freq='D')
     container_table['starting_date'] = container_table.State.apply(
                                     lambda row: pd.DataFrame(
