@@ -38,13 +38,22 @@ q4 = sp.Symbol('q4')
 quarters = [q1, q2, q3, q4]
 
 # Locations
-locationA = sp.Symbol('locationA')
-locationB = sp.Symbol('locationB')
-locationC = sp.Symbol('locationC')
-locationO = sp.Symbol('locationO')
+ClarkandMonroe = sp.Symbol('ClarkandMonroe')
+LasalleandAdams = sp.Symbol('LasalleandAdams')
+MadisonandWacker = sp.Symbol('MadisonandWacker')
+UniversityofChicago = sp.Symbol('UniversityofChicago')
+WabashandVanBuren = sp.Symbol('WabashandVanBuren')
+WackerandAdams = sp.Symbol('WackerandAdams')
+WestChicagoAvenue = sp.Symbol('WestChicagoAvenue')
+WillisTower = sp.Symbol('WillisTower')
+Other = sp.Symbol('Other')
 locations = pd.DataFrame(
-    [locationA, locationB, locationC, locationO]).transpose()
-locations.columns = ['A', 'B', 'C', 'O']
+    [ClarkandMonroe, LasalleandAdams, MadisonandWacker,
+     UniversityofChicago, WabashandVanBuren, WackerandAdams, 
+     WestChicagoAvenue, WillisTower, Other]).transpose()
+locations.columns = ['ClarkandMonroe', 'LasalleandAdams', 'MadisonandWacker',
+                     'UniversityofChicago', 'WabashandVanBuren', 'WackerandAdams',
+                     'WestChicagoAvenue', 'WillisTower', 'Other']
 
 # Main variables
 high_historic_count = sp.Symbol('high_historic_count')
@@ -55,6 +64,7 @@ high_current_diversity = sp.Symbol('high_current_diversity')
 
 
 # Create states as a tuple and add as a column to the input location data 
+# Returns where each truck parked at each state
 def make_states(location_data, making_probabilities, truck_types):
     """
     Takes DataFrame with Truck, Location, and Date and returns DataFrame with created states and also state variables
@@ -63,17 +73,20 @@ def make_states(location_data, making_probabilities, truck_types):
     # Complete panel if making the probabilities from the original location
     # data (else the panel is already complete by construction)
     if making_probabilities:
+
+        # THIS IS AN INSIGHTFUL TABLE!!!
         location_data = location_data.pivot(
             index='Date', columns='Truck', values='Location')
         location_data = location_data.unstack().reset_index(
-            name='Location').fillna('O')
+            name='Location')
+        location_data.Location = location_data.Location.fillna('Other')
 
     # Merge on truck types
     location_data = pd.merge(location_data, truck_types, on='Truck')
 
     # Create time variables (most of the state variables are at the week level)
     location_data['Date'] = pd.to_datetime(location_data['Date'])
-    location_data['Year_Plus_Week'] = location_data['Date'].dt.week + location_data['Date'].dt.year
+    location_data['Year_Plus_Week'] = location_data['Date'].dt.week*100000 + location_data['Date'].dt.year
     location_data['Day_Of_Week'] = location_data['Date'].dt.dayofweek
     location_data['Quarter'] = location_data['Date'].dt.quarter
 
@@ -128,9 +141,10 @@ def make_states(location_data, making_probabilities, truck_types):
 
     # If making the probability table merge these new variables onto the
     # location data on with a lag
+    # NOT CORRECT FOR LAST WEEK OF YEAR!
     if making_probabilities:
-        joint_state_variables.Year_Plus_Week += 1
-        historic_truck_frequencies.Year_Plus_Week +=  1
+        joint_state_variables.Year_Plus_Week += 100000
+        historic_truck_frequencies.Year_Plus_Week +=  100000
 
     # Else just merge (note that observations that are not matched are being
     # dropped)
@@ -173,7 +187,7 @@ def find_probabilities(cleaned_location_data):
 
     # Calculate the probabilities
     probabilities = pd.merge(numerator, denominator, on=['Truck', 'State'])
-    probabilities['Probability'] = probabilities.Date_x / probabilities.Date_y.apply(float)
+    probabilities['Probability'] = probabilities.Date_x.apply(float) / probabilities.Date_y.apply(float)
     probabilities = probabilities.drop(['Date_x', 'Date_y'], 1)
 
     return probabilities
@@ -184,6 +198,10 @@ def optimal_action(probability_list, state, truck_types):
     """
     Find optimal actions for the trucks at the given state from the Probability DataFrame
     """
+
+    #probability_list = probabilities
+    #state = starting_state
+    #probability_list.loc[probability_list['State'] == state].empty
 
     # If the state is not present in the historic data then generate random
     # actions for the trucks
@@ -425,6 +443,7 @@ def find_value_function(probabilities, starting_state, starting_date, periods,
     return Step_One[Step_One.Truck == truck_id].Profit.get_values()[0]
 
 
+# HAVE CHANGED SAMPLE TO HEAD TEMPORARILY TO DEAL WITH OLD VERSION OF PANDAS ON GRID
 # Build the terms that go into the objective to the maximization problem
 def build_g(probabilities, periods, discount, state_variables, N, truck_types, num_draws):
     """
@@ -448,10 +467,10 @@ def build_g(probabilities, periods, discount, state_variables, N, truck_types, n
     # Interact trucks and alternative strategies with all possible starting states
     # being given positive weight
     container_table['key'] = 1
-    states = pd.DataFrame(probabilities[probabilities.Truck == 1].State)
+    states = pd.DataFrame(probabilities[probabilities.Truck == 'Yum Dum Truck'].State)
     states['key'] = 1
     container_table = pd.merge(container_table, states, on='key').drop('key', axis=1)
-    container_table = container_table.sample(num_draws)
+    container_table = container_table.head(num_draws)
 
     # Create starting date appropriate for starting states day of week and quarter
     # by randomly drawing from the possibilities
@@ -460,7 +479,7 @@ def build_g(probabilities, periods, discount, state_variables, N, truck_types, n
                                     lambda row: pd.DataFrame(
                                         dates[(dates.quarter == row[state_variables.index('Quarter')]) 
                                         & (dates.dayofweek == row[state_variables.index('Day_Of_Week')] 
-                                        )]).sample(1)[0].apply(str).values[0][:10])
+                                        )]).head(1)[0].apply(str).values[0][:10])
 
     # Estimate the value functions
     container_table['Value_Function_For_Other_Actions'] = container_table.apply(lambda row:
@@ -470,6 +489,7 @@ def build_g(probabilities, periods, discount, state_variables, N, truck_types, n
                                         action_generator=row['action_generator'],
                                         specific_action=row['specific_action'],
                                         N=N, truck_types=truck_types), axis=1)
+
 
     container_table['Value_Function'] = container_table.apply(lambda row:
                     find_value_function(probabilities=probabilities, starting_state=row['State'],
