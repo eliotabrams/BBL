@@ -31,17 +31,20 @@ location = ''
 day = ''
 week = ''
 
+# Loop setup to run over locally saved files
+# Remove hashes to re-pull
 for x in xrange(len(addresses)):
 
     # Get html
-    raw_html = urllib2.urlopen(addresses[x]).read()
+    #raw_html = urllib2.urlopen(addresses[x]).read()
 
     # Save file
-    f = open(file_names[x], 'w')
-    f.write(raw_html)
+    #f = open(file_names[x], 'w')
+    #f.write(raw_html)
 
     # Parse document
-    soup = BeautifulSoup(raw_html)
+    #soup = BeautifulSoup(raw_html)
+    soup = BeautifulSoup(open(file_names[x]))
     count = 0
     week = soup.h1.text
 
@@ -62,14 +65,17 @@ for x in xrange(len(addresses)):
                 pd.DataFrame([location, day, truck, week]).transpose())
 
 
-# Clean scrapped data (WILL NEED TO PAY ATTENTION TO TIMESTAMP TO FIND
-# LUNCH SERVICE)
+# Clean scrapped data 
 
 # Set index
 location_data = location_data.reset_index().drop('index', axis=1)
 
 # Get truck name
 location_data['Truck'] = location_data[2].apply(lambda x: x[20:])
+
+# Get parking time
+location_data['Start_Time'] = location_data[2].apply(lambda x: x[:8])
+location_data['End_Time'] = location_data[2].apply(lambda x: x[11:19])
 
 # Construct data
 location_data['Coarse_Date'] = location_data[3].apply(lambda x: x[11:])
@@ -89,11 +95,7 @@ location_data.Location = location_data.Location.apply(
 location_data.Location = location_data.Location.apply(
     lambda x: x.replace(', Chicago, IL', ''))
 
-# Print full data
-print location_data.groupby('Truck').count().to_string()
-print location_data.groupby('Location').count().to_string()
-
 # Output data
-location_data.to_csv('output.csv', encoding='utf-8')
+location_data.to_csv('locations.csv', encoding='utf-8')
 
 

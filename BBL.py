@@ -38,22 +38,23 @@ q4 = sp.Symbol('q4')
 quarters = [q1, q2, q3, q4]
 
 # Locations
+CityfrontPlaza = sp.Symbol('CityfrontPlaza')
 ClarkandMonroe = sp.Symbol('ClarkandMonroe')
 LasalleandAdams = sp.Symbol('LasalleandAdams')
 MadisonandWacker = sp.Symbol('MadisonandWacker')
+RandolphandColumbus = sp.Symbol('RandolphandColumbus')
 UniversityofChicago = sp.Symbol('UniversityofChicago')
-WabashandVanBuren = sp.Symbol('WabashandVanBuren')
 WackerandAdams = sp.Symbol('WackerandAdams')
 WestChicagoAvenue = sp.Symbol('WestChicagoAvenue')
-WillisTower = sp.Symbol('WillisTower')
 Other = sp.Symbol('Other')
 locations = pd.DataFrame(
-    [ClarkandMonroe, LasalleandAdams, MadisonandWacker,
-     UniversityofChicago, WabashandVanBuren, WackerandAdams, 
-     WestChicagoAvenue, WillisTower, Other]).transpose()
-locations.columns = ['ClarkandMonroe', 'LasalleandAdams', 'MadisonandWacker',
-                     'UniversityofChicago', 'WabashandVanBuren', 'WackerandAdams',
-                     'WestChicagoAvenue', 'WillisTower', 'Other']
+    [CityfrontPlaza, ClarkandMonroe, LasalleandAdams, MadisonandWacker, 
+     RandolphandColumbus, UniversityofChicago, WackerandAdams, 
+     WestChicagoAvenue, Other]).transpose()
+locations.columns = ['CityfrontPlaza', 'ClarkandMonroe', 'LasalleandAdams', 
+                     'MadisonandWacker', 'RandolphandColumbus',
+                     'UniversityofChicago', 'WackerandAdams',
+                     'WestChicagoAvenue', 'Other']
 
 # Main variables
 high_historic_count = sp.Symbol('high_historic_count')
@@ -162,6 +163,16 @@ def make_states(location_data, making_probabilities, truck_types):
     state_variables.remove('Location')
     state_variables.remove('Type')
     state_variables.remove('Year_Plus_Week')
+
+    # As trucks might be following a schedule, I would like to include Day of Week 
+    # in the state. That said, I've already dropped weekends and rare spots, 
+    # so I do not think that consumer demand "at" any of the remaining observations 
+    # differs by day alone.
+    # What clinches the issues is that including Day of Week in the state makes 
+    # every observation a unique state (which is both not tractable and indicative that the model is
+    # over specified). Leaving Day of Week out creates a nice diversity of actions per state
+    # I thus proceed without Day of Week
+    state_variables.remove('Day_Of_Week')
 
     # Store state as a tuple
     # Potentially redo to store state as a dictionary, but not a simple change and benefits unclear
@@ -274,8 +285,7 @@ def get_profit(location, truck, shock, df, current_variables, truck_types):
     # Add intercept, day of week indicator, quarter indicator, and shock. Day
     # of week is fed in as a 0-6, but quarter is fed in as 1-4 hence the
     # indexing adjustment for quarter
-    profit = intercept + days[df.Day_Of_Week[0]] + \
-        quarters[df.Quarter[0] - 1] + shock
+    profit = intercept + quarters[df.Quarter[0] - 1] + shock
 
     # Add historic count and diversity at chosen location
     count_var = 'Count' + location
@@ -351,8 +361,6 @@ def update_state(state, action_sequence, Date, state_variables, truck_types):
     # as a tuple generally so that I don't accidently change it)
     else:
         new_state = list(state)
-        new_state[state_variables.index('Day_Of_Week')] = pd.DatetimeIndex(
-            [Date])[0].dayofweek
         new_state[state_variables.index('Quarter')] = pd.DatetimeIndex(
             [Date])[0].quarter
         new_state = tuple(new_state)
@@ -470,15 +478,19 @@ def build_g(probabilities, periods, discount, state_variables, N, truck_types, n
     states = pd.DataFrame(probabilities[probabilities.Truck == 'Yum Dum Truck'].State)
     states['key'] = 1
     container_table = pd.merge(container_table, states, on='key').drop('key', axis=1)
+
+    # Randomly draw requested number of inequalities
+    # Cannot use the .sample() method because only have Pandas 0.15.2 on grid
+    container_table = container_table.reindex(np.random.permutation(container_table.index))
     container_table = container_table.head(num_draws)
 
-    # Create starting date appropriate for starting states day of week and quarter
+    # Create starting date appropriate for quarter
     # by randomly drawing from the possibilities
+    # Currently NOT WORKING! Has everything starting on first day of quarter.
     dates = pd.date_range(start='1/1/2011', end='12/31/2011', freq='D')
     container_table['starting_date'] = container_table.State.apply(
                                     lambda row: pd.DataFrame(
-                                        dates[(dates.quarter == row[state_variables.index('Quarter')]) 
-                                        & (dates.dayofweek == row[state_variables.index('Day_Of_Week')] 
+                                        dates[(dates.quarter == row[state_variables.index('Quarter')] 
                                         )]).head(1)[0].apply(str).values[0][:10])
 
     # Estimate the value functions
