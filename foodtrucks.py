@@ -145,10 +145,39 @@ truck_types = pd.merge(truck_types,
 ##      Run Estimation      ##
 ##############################
 
+# Set the discretize cutoffs
+set_discretize(location_data, truck_types)
+print HIGH_COUNT
+print HIGH_UNIQUE
+print HIGH_FREQ
+
+# Complete panel if making probabilities (else complete by construction)
+location_data = location_data.pivot(
+    index='Date', columns='Truck', values='Location')
+location_data = location_data.unstack().reset_index(
+    name='Location')
+location_data.Location = location_data.Location.fillna('Other')
+
 # Create variables
 # Double check that the location_data table only has columns for Location, Truck, and Date
-(cleaned_location_data, state_variables) = make_states(
-    location_data=location_data, making_probabilities=True, truck_types=truck_types)
+(made_states, state_variables) = make_states(
+    actions=location_data, making_probabilities=True, truck_types=truck_types)
+
+location_data['Date'] = pd.to_datetime(location_data['Date'])
+made_states['Date'] = pd.to_datetime(made_states['Date'])
+
+len(made_states.State.value_counts())
+made_states.State.value_counts().describe()
+
+made_states = made_states.reset_index()
+
+
+made_states.hist()
+
+location_data_w_states = pd.merge(location_data, made_states, on='Date', how='left')
+
+print len(location_data_w_states.State.value_counts())
+print len(cleaned_location_data.Year_Plus_Week.value_counts())
 
 """
 # Examine results (note that an other location has been added for a total of 9 locations)
@@ -177,6 +206,7 @@ pylab
 pd.options.display.mpl_style = 'default'
 probabilities.hist()
 
+THIS NEEDS TO BE RE-WRITTEN
 truck_types = truck_types.reindex(np.random.permutation(truck_types.index))    
 truck = truck_types.head(1).Truck.values[0]
 test = list(locations.columns + truck) + list('Count' 

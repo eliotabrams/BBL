@@ -10,7 +10,7 @@ import sympy as sp
 import datetime as dt
 import scipy.optimize as opt
 
-# Constants (These will be removed)
+# Constants
 COUNT_OF_EMPTY_STATES_REACHED = 0
 HIGH_COUNT = 0
 HIGH_UNIQUE = 0
@@ -66,137 +66,135 @@ high_historic_freq = sp.Symbol('high_historic_freq')
 high_current_count = sp.Symbol('high_current_count')
 high_current_diversity = sp.Symbol('high_current_diversity')
 
+# Create the quantiles for discretizing
+# These should be redone so that they use the same rolling window as the make states below
+def set_discretize(location_data, truck_types):
+    """
+    Create the quantiles for discretizing
+
+    """
+
+    # Tell function which variables are globals
+    global HIGH_COUNT
+    global HIGH_UNIQUE
+    global HIGH_FREQ
+
+    # Find the frequency with which each truck parks at each location_data
+    location_data = pd.merge(location_data, truck_types, on='Truck')
+    location_data['Date'] = pd.to_datetime(location_data['Date'])
+    location_data['Week'] = location_data.Date.dt.week
+    parkings_per_location = location_data.groupby(['Location', 'Week']).Type.agg(['count', 'nunique'])
+    HIGH_COUNT = parkings_per_location.quantile(q=0.8)[0]*2
+    HIGH_UNIQUE = parkings_per_location.quantile(q=0.8)[1]
+
+    # Find the frequency with which each truck parks at each location_data
+    truck_parkings_per_location = location_data.groupby(['Truck', 'Location']).Date.count().reset_index()
+    truck_parkings = location_data.groupby(['Truck']).Date.count().reset_index()
+    truck_parkings_per_location = truck_parkings_per_location.merge(truck_parkings, on='Truck') 
+    truck_parkings_per_location['Freq'] = truck_parkings_per_location.Date_x / \
+        truck_parkings_per_location.Date_y.apply(float) 
+    HIGH_FREQ = truck_parkings_per_location.quantile(q=0.8, axis=0)[2]*10
+
+    return
+
 
 # Create states as a tuple and add as a column to the input location data 
 # Returns where each truck parked at each state
-def make_states(location_data, making_probabilities, truck_types):
+def make_states(actions, making_probabilities, truck_types):
     """
     Takes DataFrame with Truck, Location, and Date and returns DataFrame with created states and also state variables
     """
-    # Complete panel if making probabilities (else complete by construction)
-    if making_probabilities:
-        location_data = location_data.pivot(
-            index='Date', columns='Truck', values='Location')
-        location_data = location_data.unstack().reset_index(
-            name='Location')
-        location_data.Location = location_data.Location.fillna('Other')
 
     # Merge on truck types
-    location_data = pd.merge(location_data, truck_types, on='Truck')
+    actions = pd.merge(actions, truck_types, on='Truck')
 
-    # Create time variables (most of the state variables are at the week level)
-    location_data['Date'] = pd.to_datetime(location_data['Date'])
-    location_data['Year_Plus_Week'] = location_data['Date'].dt.week + location_data['Date'].dt.year*52
-    location_data['Day_Of_Week'] = location_data['Date'].dt.dayofweek
-    location_data['Quarter'] = location_data['Date'].dt.quarter
+    # Create date range
+    actions['Date'] = pd.to_datetime(actions['Date'])
+    dates = pd.date_range(start=actions.Date[0], end=actions.Date[len(actions)-1], freq='D')
+    dates = dates[dates.dayofweek<5]
 
-    # Find the number and diversity of trucks at each location in each week
-    grouped_by_year_plus_week_location = location_data.groupby(['Year_Plus_Week', 'Location'])
-    joint_state_variables = grouped_by_year_plus_week_location.Type.agg(['count', 'nunique']).reset_index(
-        ['Location', 'Year_Plus_Week']).rename(columns={'count': 'Count', 'nunique': 'Num_Unique'})
-    joint_state_variables = joint_state_variables[joint_state_variables.Location!='Other']
+    states = pd.DataFrame()
+    # Loop over lag 10 days
+    for x in xrange(len(dates) - 10):
+        location_data = actions[(actions.Date >= dates[x]) & (actions.Date < dates[x+10])]
 
-    # Create the quantiles for discretizing
-    global HIGH_COUNT
-    global HIGH_UNIQUE
+        # Find the number and diversity of trucks at each location in each week
+        grouped_by_year_plus_week_location = location_data.groupby('Location')
+        joint_state_variables = grouped_by_year_plus_week_location.Type.agg(['count', 'nunique']).reset_index(
+            ['Location']).rename(columns={'count': 'Count', 'nunique': 'Num_Unique'})
+        joint_state_variables = joint_state_variables[joint_state_variables.Location!='Other']
 
-    if making_probabilities:
-        HIGH_COUNT = joint_state_variables.quantile(q=0.8, axis=0)[1]
-        HIGH_UNIQUE = joint_state_variables.quantile(q=0.8, axis=0)[2]
+        container_table = truck_types.drop('Type', axis=1)
+        temp = pd.DataFrame(list(locations.columns), columns=['Location'])
 
-    # Discretize the values (turn into dummy variables for now).
-    joint_state_variables.Count = joint_state_variables.Count.apply(lambda row: int(row >= HIGH_COUNT))
-    joint_state_variables.Num_Unique = joint_state_variables.Num_Unique.apply(lambda row: int(row >= HIGH_UNIQUE))
+        joint_state_variables = pd.merge(joint_state_variables, temp, how='right', on='Location').fillna(0)
+        joint_state_variables['Date'] = dates[x+10]
 
-    # Form the pivot table
-    joint_state_variables = pd.pivot_table(joint_state_variables,
-                                           values=['Count', 'Num_Unique'],
-                                           index='Year_Plus_Week',
-                                           columns='Location').fillna(0).reset_index(['Year_Plus_Week', 'Count', 'Num_Unique'])
+        # Discretize the values (turn into dummy variables for now).
+        joint_state_variables.Count = joint_state_variables.Count.apply(lambda row: int(row >= HIGH_COUNT))
+        joint_state_variables.Num_Unique = joint_state_variables.Num_Unique.apply(lambda row: int(row >= HIGH_UNIQUE))
 
-    # Collapse the multiple indices
-    joint_state_variables.columns = pd.Index(
-        [e[0] + e[1] for e in joint_state_variables.columns.tolist()])
+        # Form the pivot table
+        joint_state_variables = pd.pivot_table(joint_state_variables,
+                                               values=['Count', 'Num_Unique'],
+                                               index='Date',
+                                               columns='Location').fillna(0).reset_index(['Year_Plus_Week', 'Count', 'Num_Unique'])
 
-    # Find the frequency with which each truck parks at each location_data
-    truck_specific_state_variables = location_data.groupby(['Truck', 'Year_Plus_Week', 'Location'])['Date'].count(
-    ).reset_index(['Truck', 'Location', 'Year_Plus_Week']).rename(columns={'Date': 'Truck_Weekly_Frequency'})
-    truck_specific_state_variables = truck_specific_state_variables[truck_specific_state_variables.Location!='Other']
+        # Collapse the multiple indices
+        joint_state_variables.columns = pd.Index(
+            [e[0] + e[1] for e in joint_state_variables.columns.tolist()])
 
-    # Create the quantiles for discretizing
-    global HIGH_FREQ
-    if making_probabilities:
-        HIGH_FREQ = truck_specific_state_variables.quantile(q=0.8, axis=0)[1]
+        # Find the frequency with which each truck parks at each location_data
+        truck_specific_state_variables = location_data.groupby(['Truck', 'Location']).Date.count(
+        ).reset_index(['Truck', 'Location']).rename(columns={'Date': 'Truck_Weekly_Frequency'})
+        truck_specific_state_variables = truck_specific_state_variables[truck_specific_state_variables.Location!='Other']
+        truck_specific_state_variables['Date'] = dates[x+10]
 
-    # Discretize the values (turn into dummy variables for now).
-    truck_specific_state_variables.Truck_Weekly_Frequency = truck_specific_state_variables.Truck_Weekly_Frequency.apply(
-        lambda row: int(row > HIGH_FREQ))
+        # Discretize the values (turn into dummy variables for now).
+        truck_specific_state_variables.Truck_Weekly_Frequency = truck_specific_state_variables.Truck_Weekly_Frequency.apply(
+            lambda row: int(row > HIGH_FREQ))
 
-    # Create container table table (to ensure that all truck location combinations are present)
-    container_table = truck_types.drop('Type', axis=1)
-    temp = pd.DataFrame(list(locations.columns), columns=['Location'])
-    container_table['key'] = 1
-    temp['key'] = 1
-    container_table = pd.merge(
-        container_table, temp, on='key').ix[:, ('Truck', 'Location')]
+        # Create container table table (to ensure that all truck location combinations are present)
+        container_table = truck_types.drop('Type', axis=1)
+        temp = pd.DataFrame(list(locations.columns), columns=['Location'])
+        container_table['key'] = 1
+        temp['key'] = 1
+        container_table = pd.merge(
+            container_table, temp, on='key').ix[:, ('Truck', 'Location')]
 
-    # Finish the pivot table
-    truck_specific_state_variables = truck_specific_state_variables.append(container_table).fillna(0)
-    historic_truck_frequencies = pd.pivot_table(truck_specific_state_variables,
-                                                values='Truck_Weekly_Frequency',
-                                                index='Year_Plus_Week',
-                                                columns=['Location', 'Truck']).fillna(0).reset_index()
-    historic_truck_frequencies = historic_truck_frequencies[historic_truck_frequencies.Year_Plus_Week != 0]
+        # Finish the pivot table
+        truck_specific_state_variables = truck_specific_state_variables.append(container_table).fillna(0)
+        historic_truck_frequencies = pd.pivot_table(truck_specific_state_variables,
+                                                    values='Truck_Weekly_Frequency',
+                                                    index='Date',
+                                                    columns=['Location', 'Truck']).fillna(0).reset_index()
 
-    # Collapse the multiple indices
-    historic_truck_frequencies.columns = pd.Index(
-        [e[0] + str(e[1]) for e in historic_truck_frequencies.columns.tolist()])
+        # Collapse the multiple indices
+        historic_truck_frequencies.columns = pd.Index(
+            [e[0] + str(e[1]) for e in historic_truck_frequencies.columns.tolist()])
 
+        # Should be a single entry
+        new_vars = pd.merge(joint_state_variables, historic_truck_frequencies, on=['Date'])
+        
+        # Create quarter
+        new_vars['Quarter'] = new_vars.Date.dt.quarter
 
-    # If making the probabilities from the original location
-    # data merge  state variables onto the location data on with a lag
-    if making_probabilities:
-        joint_state_variables.Year_Plus_Week += 1
-        historic_truck_frequencies.Year_Plus_Week +=  1
+        # Concatenate the created variables into a single state variable
+        new_vars = new_vars.reindex_axis(sorted(new_vars.columns), axis=1)
+        state_variables = new_vars.columns
+        state_variables = state_variables.drop('Date')
+        state_variables = list(state_variables)
 
-    # Else just merge (note that observations that are not matched are being
-    # dropped)
-    new_vars = pd.merge(joint_state_variables, historic_truck_frequencies, on=['Year_Plus_Week'])
-    location_data = pd.merge(
-        location_data, new_vars, on=['Year_Plus_Week'])
+        # Add new state to list along with its corresponding date
+        states = states.append(
+            pd.DataFrame([dates[x+10], tuple(new_vars[state_variables].values[0])]).transpose())
 
-
-    # Concatenate the created variables into a single state variable
-    location_data = location_data.reindex_axis(
-        sorted(location_data.columns), axis=1)
-    state_variables = location_data.columns.tolist()
-    state_variables.remove('Truck')
-    state_variables.remove('Date')
-    state_variables.remove('Location')
-    state_variables.remove('Type')
-    state_variables.remove('Year_Plus_Week')
-
-
-    # As trucks might be following a schedule, I would like to include Day of Week 
-    # in the state. That said, I've already dropped weekends and rare spots, 
-    # so I do not think that consumer demand "at" any of the remaining observations 
-    # differs by day alone.
-    # What clinches the issues is that including Day of Week in the state makes 
-    # every observation a unique state (which is both not tractable and indicative that the model is
-    # over specified). Leaving Day of Week out creates a nice diversity of actions per state
-    # I thus proceed without Day of Week
-    state_variables.remove('Day_Of_Week')
-
-    # Store state as a tuple
-    # Potentially redo to store state as a dictionary, but not a simple change and benefits unclear
-    location_data['State'] = location_data[state_variables].values.tolist()
-    location_data.State = location_data.State.apply(tuple)
-
-    return [location_data, state_variables]
+    states.columns = ['Date', 'State']
+    return (states, state_variables)
 
 
 # Calculate P(a_{it} | s_t) (WILL NEED TO REDO WITH A SEIVE LOGIT)
-def find_probabilities(cleaned_location_data):
+def find_probabilities(actions_with_states):
     """
     Takes DataFrame with Truck, Location, Date, and State and returns DataFrame with action probabilities
     """
