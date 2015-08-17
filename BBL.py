@@ -12,6 +12,9 @@ import scipy.optimize as opt
 
 # Constants (These will be removed)
 COUNT_OF_EMPTY_STATES_REACHED = 0
+HIGH_COUNT = 0
+HIGH_UNIQUE = 0
+HIGH_FREQ = 0
 
 # Sympy Variables (WOULD LIKE TO FIND A CLEANER WAY OF DECLARING AND
 # STORING THESE) These are not all used yet, but will come in handy when I 
@@ -46,15 +49,15 @@ RandolphandColumbus = sp.Symbol('RandolphandColumbus')
 UniversityofChicago = sp.Symbol('UniversityofChicago')
 WackerandAdams = sp.Symbol('WackerandAdams')
 WestChicagoAvenue = sp.Symbol('WestChicagoAvenue')
-Other = sp.Symbol('Other')
+
 locations = pd.DataFrame(
     [CityfrontPlaza, ClarkandMonroe, LasalleandAdams, MadisonandWacker, 
      RandolphandColumbus, UniversityofChicago, WackerandAdams, 
-     WestChicagoAvenue, Other]).transpose()
+     WestChicagoAvenue]).transpose()
 locations.columns = ['CityfrontPlaza', 'ClarkandMonroe', 'LasalleandAdams', 
                      'MadisonandWacker', 'RandolphandColumbus',
                      'UniversityofChicago', 'WackerandAdams',
-                     'WestChicagoAvenue', 'Other']
+                     'WestChicagoAvenue']
 
 # Main variables
 high_historic_count = sp.Symbol('high_historic_count')
@@ -70,12 +73,8 @@ def make_states(location_data, making_probabilities, truck_types):
     """
     Takes DataFrame with Truck, Location, and Date and returns DataFrame with created states and also state variables
     """
-
-    # Complete panel if making the probabilities from the original location
-    # data (else the panel is already complete by construction)
+    # Complete panel if making probabilities (else complete by construction)
     if making_probabilities:
-
-        # THIS IS AN INSIGHTFUL TABLE!!!
         location_data = location_data.pivot(
             index='Date', columns='Truck', values='Location')
         location_data = location_data.unstack().reset_index(
@@ -87,15 +86,29 @@ def make_states(location_data, making_probabilities, truck_types):
 
     # Create time variables (most of the state variables are at the week level)
     location_data['Date'] = pd.to_datetime(location_data['Date'])
-    location_data['Year_Plus_Week'] = location_data['Date'].dt.week*100000 + location_data['Date'].dt.year
+    location_data['Year_Plus_Week'] = location_data['Date'].dt.week + location_data['Date'].dt.year*52
     location_data['Day_Of_Week'] = location_data['Date'].dt.dayofweek
     location_data['Quarter'] = location_data['Date'].dt.quarter
 
     # Find the number and diversity of trucks at each location in each week
-    # Form the pivot table
     grouped_by_year_plus_week_location = location_data.groupby(['Year_Plus_Week', 'Location'])
     joint_state_variables = grouped_by_year_plus_week_location.Type.agg(['count', 'nunique']).reset_index(
         ['Location', 'Year_Plus_Week']).rename(columns={'count': 'Count', 'nunique': 'Num_Unique'})
+    joint_state_variables = joint_state_variables[joint_state_variables.Location!='Other']
+
+    # Create the quantiles for discretizing
+    global HIGH_COUNT
+    global HIGH_UNIQUE
+
+    if making_probabilities:
+        HIGH_COUNT = joint_state_variables.quantile(q=0.8, axis=0)[1]
+        HIGH_UNIQUE = joint_state_variables.quantile(q=0.8, axis=0)[2]
+
+    # Discretize the values (turn into dummy variables for now).
+    joint_state_variables.Count = joint_state_variables.Count.apply(lambda row: int(row >= HIGH_COUNT))
+    joint_state_variables.Num_Unique = joint_state_variables.Num_Unique.apply(lambda row: int(row >= HIGH_UNIQUE))
+
+    # Form the pivot table
     joint_state_variables = pd.pivot_table(joint_state_variables,
                                            values=['Count', 'Num_Unique'],
                                            index='Year_Plus_Week',
@@ -105,16 +118,19 @@ def make_states(location_data, making_probabilities, truck_types):
     joint_state_variables.columns = pd.Index(
         [e[0] + e[1] for e in joint_state_variables.columns.tolist()])
 
-    # Discretize the values (turn into dummy variables for now). Do in seperate function later!
-    joint_state_variables[joint_state_variables.ix[
-        :, joint_state_variables.columns != 'Year_Plus_Week'] <= 4] = 0
-    joint_state_variables[joint_state_variables.ix[
-        :, joint_state_variables.columns != 'Year_Plus_Week'] > 4] = 1
-
     # Find the frequency with which each truck parks at each location_data
-    # Form the pivot table
     truck_specific_state_variables = location_data.groupby(['Truck', 'Year_Plus_Week', 'Location'])['Date'].count(
     ).reset_index(['Truck', 'Location', 'Year_Plus_Week']).rename(columns={'Date': 'Truck_Weekly_Frequency'})
+    truck_specific_state_variables = truck_specific_state_variables[truck_specific_state_variables.Location!='Other']
+
+    # Create the quantiles for discretizing
+    global HIGH_FREQ
+    if making_probabilities:
+        HIGH_FREQ = truck_specific_state_variables.quantile(q=0.8, axis=0)[1]
+
+    # Discretize the values (turn into dummy variables for now).
+    truck_specific_state_variables.Truck_Weekly_Frequency = truck_specific_state_variables.Truck_Weekly_Frequency.apply(
+        lambda row: int(row > HIGH_FREQ))
 
     # Create container table table (to ensure that all truck location combinations are present)
     container_table = truck_types.drop('Type', axis=1)
@@ -136,23 +152,19 @@ def make_states(location_data, making_probabilities, truck_types):
     historic_truck_frequencies.columns = pd.Index(
         [e[0] + str(e[1]) for e in historic_truck_frequencies.columns.tolist()])
 
-    # Discretize the values (turn into dummy variables for now). Do in separate function later!
-    historic_truck_frequencies[historic_truck_frequencies.ix[
-        :, historic_truck_frequencies.columns != 'Year_Plus_Week'] > 0] = 1
 
-    # If making the probability table merge these new variables onto the
-    # location data on with a lag
-    # NOT CORRECT FOR LAST WEEK OF YEAR!
+    # If making the probabilities from the original location
+    # data merge  state variables onto the location data on with a lag
     if making_probabilities:
-        joint_state_variables.Year_Plus_Week += 100000
-        historic_truck_frequencies.Year_Plus_Week +=  100000
+        joint_state_variables.Year_Plus_Week += 1
+        historic_truck_frequencies.Year_Plus_Week +=  1
 
     # Else just merge (note that observations that are not matched are being
     # dropped)
+    new_vars = pd.merge(joint_state_variables, historic_truck_frequencies, on=['Year_Plus_Week'])
     location_data = pd.merge(
-        location_data, joint_state_variables, on=['Year_Plus_Week'])
-    location_data = pd.merge(
-        location_data, historic_truck_frequencies, on=['Year_Plus_Week'])
+        location_data, new_vars, on=['Year_Plus_Week'])
+
 
     # Concatenate the created variables into a single state variable
     location_data = location_data.reindex_axis(
@@ -163,6 +175,7 @@ def make_states(location_data, making_probabilities, truck_types):
     state_variables.remove('Location')
     state_variables.remove('Type')
     state_variables.remove('Year_Plus_Week')
+
 
     # As trucks might be following a schedule, I would like to include Day of Week 
     # in the state. That said, I've already dropped weekends and rare spots, 
@@ -282,25 +295,30 @@ def get_profit(location, truck, shock, df, current_variables, truck_types):
     Builds the period profit vector for a truck
     """
 
+    # Zero out profit if chosen location is Other
+    if (location == 'Other'):
+        profit = 0
+
     # Add intercept, day of week indicator, quarter indicator, and shock. Day
     # of week is fed in as a 0-6, but quarter is fed in as 1-4 hence the
     # indexing adjustment for quarter
-    profit = intercept + quarters[df.Quarter[0] - 1] + shock
+    else:
+        profit = intercept + quarters[df.Quarter[0] - 1] + shock
 
-    # Add historic count and diversity at chosen location
-    count_var = 'Count' + location
-    num_unique_var = 'Num_Unique' + location
-    profit = profit + df[count_var][0] * high_historic_count + \
-        df[num_unique_var][0] * high_historic_diversity
+        # Add historic count and diversity at chosen location
+        count_var = 'Count' + location
+        num_unique_var = 'Num_Unique' + location
+        profit = profit + df[count_var][0] * high_historic_count + \
+            df[num_unique_var][0] * high_historic_diversity
 
-    # Add truck's historic frequency at chosen location
-    historic_freq_var = location + str(truck)
-    profit = profit + df[historic_freq_var][0] * high_historic_freq
+        # Add truck's historic frequency at chosen location
+        historic_freq_var = location + str(truck)
+        profit = profit + df[historic_freq_var][0] * high_historic_freq
 
-    # Add current location variables
-    profit = profit + locations[location][0] + current_variables.Count[location] * \
-        high_current_count + \
-        current_variables.Num_Unique[location] * high_current_diversity
+        # Add current location variables
+        profit = profit + locations[location][0] + current_variables.Count[location] * \
+            high_current_count + \
+            current_variables.Num_Unique[location] * high_current_diversity
 
     return profit
 
@@ -318,12 +336,14 @@ def create_profit_vector(state_variables, state, actions, truck_types):
     df = pd.DataFrame([state]).applymap(int)
     df.columns = state_variables
 
-    # Create variables based on current actions and discretize
+    # Create variables based on current actions
     actions = pd.merge(actions, truck_types, on='Truck')
     current_variables = actions.groupby(['Location'])['Type'].agg(
         ['count', 'nunique']).rename(columns={'count': 'Count', 'nunique': 'Num_Unique'})
-    current_variables[current_variables <= 2] = 0
-    current_variables[current_variables > 2] = 1
+
+    # Discretize the values (turn into dummy variables for now).
+    current_variables.Count = current_variables.Count.apply(lambda row: int(row >= HIGH_COUNT))
+    current_variables.Num_Unique = current_variables.Num_Unique.apply(lambda row: int(row >= HIGH_UNIQUE))
 
     # Create profit vector
     Profit_Vector = actions.drop(['Type'], 1)

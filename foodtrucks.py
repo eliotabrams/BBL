@@ -6,8 +6,10 @@
 # implementation
 
 # Run BBL script to setup environment and declare functions
+"""
 import os
 os.chdir('/Users/eliotabrams/Desktop/BBL')
+"""
 
 # Force re-creation of module (MESSY!)
 import BBL
@@ -34,6 +36,7 @@ print len(location_data.groupby('Location').Truck.count())
 
 # Drop old data
 location_data['Year'] = pd.to_datetime(location_data['Date']).dt.year
+#location_data.groupby(['Truck', 'Year']).Location.count().unstack().to_csv('identify_old.csv')
 location_data = location_data[location_data.Year > 2013]
 location_data = location_data.drop('Year', axis=1)
 
@@ -100,16 +103,17 @@ truck_counts.columns = ['Count']
 truck_counts.reset_index(level=0, inplace=True)
 truck_counts = truck_counts.drop('Count', axis=1)
 location_data = location_data.merge(truck_counts, on='Location')
-location_data.Location = location_data.Location.str.replace(' ', '')
-location_data.Location = location_data.Location.str.replace('600', '')
-location_data.Location = location_data.Location.str.replace('450N.', '')
 
 # Summary statistics
 print len(location_data)
 print len(location_data.groupby('Truck').Truck.count())
 print len(location_data.groupby('Location').Truck.count())
+temp = location_data.groupby('Location').Truck.count()
+temp.sort()
+print temp
 
-# Create insightful table!
+# Create tables!
+"""
 table = location_data[(location_data.Truck == "Jack's Fork in the Road")
                       | (location_data.Truck == "La Boulangerie")
                       | (location_data.Truck == "The Fat Shallot")
@@ -118,6 +122,23 @@ table = location_data[(location_data.Truck == "Jack's Fork in the Road")
 table = location_data.pivot(index='Date', columns='Truck', 
                     values='Location').tail(31).to_csv('last_month.csv')
 
+table = location_data.groupby('Truck').Truck.count()
+table = pd.DataFrame([table]).transpose()
+table.columns = ['Parkings']
+table.reset_index(level=0, inplace=True)
+table = pd.merge(table, truck_types, on='Truck')
+table.to_csv('trucks.csv')
+"""
+
+# Clean the location names
+location_data.Location = location_data.Location.str.replace(' ', '')
+location_data.Location = location_data.Location.str.replace('600', '')
+location_data.Location = location_data.Location.str.replace('450N.', '')
+
+# Reset truck types so DataFrame only contains trucks present in the
+# final data
+truck_types = pd.merge(truck_types,
+                       pd.DataFrame(location_data.drop_duplicates('Truck').Truck), on='Truck')
 
 
 ##############################
@@ -129,20 +150,46 @@ table = location_data.pivot(index='Date', columns='Truck',
 (cleaned_location_data, state_variables) = make_states(
     location_data=location_data, making_probabilities=True, truck_types=truck_types)
 
+"""
 # Examine results (note that an other location has been added for a total of 9 locations)
+print BBL.HIGH_COUNT
+print BBL.HIGH_UNIQUE
+print BBL.HIGH_FREQ
+print len(state_variables)
 print len(cleaned_location_data)
 print len(cleaned_location_data.groupby('Truck').Truck.count())
 print len(cleaned_location_data.groupby('Location').Truck.count())
-cleaned_location_data.groupby('Truck').Truck.count()
-cleaned_location_data.groupby('Location').Truck.count()
 
-# Reset truck types so DataFrame only contains trucks present in the
-# cleaned data
-truck_types = pd.merge(truck_types,
-                       pd.DataFrame(cleaned_location_data.drop_duplicates('Truck').Truck), on='Truck')
+# Get a sense of the state space
+# I need the states to repeat over time in order to have any hope that there is 
+# information in the state that the truck is using to make a decision
+# The full state does not repeat over time
+# Thankfully, the sub-state that you'd expect the truck to be paying attention to
+# does repeat significantly over time
+print len(cleaned_location_data.State.value_counts())
+print len(cleaned_location_data.Year_Plus_Week.value_counts())
+temp = cleaned_location_data.groupby('State').Year_Plus_Week.agg('nunique')
+temp.sort()
+temp.reset_index()
 
-probabilities=find_probabilities(cleaned_location_data=cleaned_location_data)
-probabilities.head(20)
+probabilities = find_probabilities(cleaned_location_data=cleaned_location_data)
+pylab
+pd.options.display.mpl_style = 'default'
+probabilities.hist()
+
+truck_types = truck_types.reindex(np.random.permutation(truck_types.index))    
+truck = truck_types.head(1).Truck.values[0]
+test = list(locations.columns + truck) + list('Count' 
+  + locations.columns) + list('Num_Unique' + locations.columns)
+test.append('Quarter')
+cleaned_location_data['Sub_State'] = cleaned_location_data[test].values.tolist()
+cleaned_location_data.Sub_State = cleaned_location_data.Sub_State.apply(tuple)
+print len(cleaned_location_data.Sub_State.value_counts())
+temp = cleaned_location_data.groupby('Sub_State').Year_Plus_Week.agg('nunique')
+temp.sort()
+temp.reset_index()
+"""
+
 
 # Estimate the coefficients and their standard errors
 # Periods controls the number of days the simulation runs for.
@@ -158,8 +205,8 @@ for x in xrange(1):
 
     # Run stage one (i.e. perform simulation)!
     g = build_g(probabilities=find_probabilities(cleaned_location_data=cleaned_location_data),
-                periods=5, discount=.99, state_variables=state_variables,
-                N=1, truck_types=truck_types, num_draws=10)
+                periods=2, discount=.99, state_variables=state_variables,
+                N=1, truck_types=truck_types, num_draws=2)
 
     # Run stage two (i.e. optimize)!
     (res, variables) = optimize(g)
@@ -174,15 +221,16 @@ variables.append('Converged')
 results.columns = variables
 results = results.reset_index().drop(['index'], axis=1)
 results = results.applymap(float)
+results.to_csv('results.csv')
 print results
-
 
 
 ##############################
 ##        Visualize         ##
 ##############################
-
+"""
 # Plot (I'm using pylab within IPython)
-# pylab
-#pd.options.display.mpl_style = 'default'
-#results.plot(subplots=True, layout=(3, 3), kind='hist')
+pylab
+pd.options.display.mpl_style = 'default'
+results.plot(subplots=True, layout=(3, 3), kind='hist')
+"""
