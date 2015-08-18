@@ -19,7 +19,7 @@ import os
 os.chdir('/Users/eliotabrams/Desktop/BBL')
 """
 
-# Force re-creation of module (MESSY!)
+# Import packages and force re-creation of module
 import BBL
 reload(BBL)
 from BBL import *
@@ -162,20 +162,24 @@ location_data.Location = location_data.Location.fillna('Other')
 # final data
 truck_types = pd.merge(truck_types, pd.DataFrame(
     location_data.drop_duplicates('Truck').Truck), on='Truck')
+truck_types.to_csv('final_truck_types.csv')
 
 
 ##############################
-##      Run Estimation      ##
+##      Create Data         ##
 ##############################
 
 # Create states
 (locations_w_states, state_variables) = make_states(
     location_data=location_data, making_probabilities=True, truck_types=truck_types)
 states = locations_w_states.State.drop_duplicates()
+pd.DataFrame(states).to_csv('states.csv')
+pd.DataFrame(state_variables).to_csv('state_variables.csv')
 
 # Create probabilities
 probabilities = find_probabilities(
     locations_w_states=locations_w_states, state_variables=state_variables)
+probabilities.to_csv('probabilities.csv')
 
 """
 # Examine results (note that an other location has been added for a total of 9 locations)
@@ -212,48 +216,4 @@ probabilities = find_probabilities(
   pylab
   pd.options.display.mpl_style = 'default'
   probabilities.hist()
-"""
-
-# Estimate the coefficients and their standard errors
-# Periods controls the number of days the simulation runs for.
-# N controls the number of simluated paths that go into creating
-# the value function. num_draws controls the number of inequalities
-# used to identify the parameters.
-# For the laws of large numbers in the math to work, I probably need
-# periods = 700+, N = 100+, num_draws = 100+, and the xrange to be 100+.
-# But need much more computing power to run.
-# Try setting xrange = 1, periods = 10, N=1, and num_draws=20 to begin.
-results = pd.DataFrame()
-for x in xrange(1):
-
-    # Run stage one (i.e. perform simulation)!
-    g = build_g(states=states, probabilities=probabilities, periods=1, discount=.99,
-                state_variables=state_variables,
-                N=1, truck_types=truck_types, num_draws=1)
-
-    # Run stage two (i.e. optimize)!
-    (res, variables) = optimize(g)
-
-    # Create DataFrame with results
-    coefs = list(res.x)
-    coefs.append(res.success)
-    results = results.append(pd.DataFrame(coefs).transpose())
-
-# Examine results
-variables.append('Converged')
-results.columns = variables
-results = results.reset_index().drop(['index'], axis=1)
-results = results.applymap(float)
-results.to_csv('results.csv')
-print results
-print results.describe().transpose().sort()[['mean', 'std']].to_latex()
-
-##############################
-##        Visualize         ##
-##############################
-"""
-# Plot (I'm using pylab within IPython)
-pylab
-pd.options.display.mpl_style = 'default'
-results.plot(subplots=True, layout=(3, 3), kind='hist')
 """

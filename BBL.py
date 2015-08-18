@@ -533,7 +533,6 @@ def build_g(states, probabilities, periods, discount, state_variables, N, truck_
     # Interact trucks and alternative strategies with all possible starting states
     # being given positive weight
     container_table['key'] = 1
-    states = pd.DataFrame([states]).transpose()
     states['key'] = 1
     container_table = pd.merge(
         container_table, states, on='key').drop('key', axis=1)
@@ -549,9 +548,8 @@ def build_g(states, probabilities, periods, discount, state_variables, N, truck_
     # Currently NOT WORKING! Has everything starting on first day of quarter.
     dates = pd.date_range(start='1/1/2011', end='12/31/2011', freq='D')
     container_table['starting_date'] = container_table.State.apply(
-        lambda row: pd.DataFrame(
-            dates[(dates.quarter == row[state_variables.index('Quarter')]
-                   )]).head(1)[0].apply(str).values[0][:10])
+        lambda row: pd.DataFrame(dates[(dates.quarter == row[state_variables.index('Quarter')])
+            ]).head(1)[0].apply(str).values[0][:10])
 
     # Estimate the value functions
     container_table['Value_Function_For_Other_Actions'] = container_table.apply(
