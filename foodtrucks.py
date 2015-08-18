@@ -1,9 +1,17 @@
-# Eliot Abrams
-# Food truck location choice
+#!/usr/bin/env python
 
-# One approach would be to have this file contain all the food truck specific stuff
-# And have the BBL file contain all the code that is generic to the BBL
-# implementation
+"""
+foodtrucks.py: Imports the BBL module and uses the commands therein 
+to run a BBL simulation on location data of Chicago Food Trucks
+"""
+
+__author__ = 'Eliot Abrams'
+__copyright__ = "Copyright (C) 2015 Eliot Abrams"
+__license__ = "MIT"
+__version__ = "1.0.0"
+__email__ = "eabrams@uchicago.edu"
+__status__ = "Production"
+
 
 """
 # Run BBL script to setup environment and declare functions
@@ -37,8 +45,7 @@ print len(location_data.groupby('Location').Truck.count())
 
 # Drop old data
 location_data['Year'] = pd.to_datetime(location_data['Date']).dt.year
-location_data.groupby(['Truck', 'Year']).Location.count().unstack().to_csv(
-    'identify_old.csv')
+#location_data.groupby(['Truck', 'Year']).Location.count().unstack().to_csv('identify_old.csv')
 location_data = location_data[location_data.Year > 2013]
 location_data = location_data.drop('Year', axis=1)
 
@@ -153,8 +160,8 @@ location_data.Location = location_data.Location.fillna('Other')
 
 # Reset truck types so DataFrame only contains trucks present in the
 # final data
-truck_types = pd.merge(truck_types,
-                       pd.DataFrame(location_data.drop_duplicates('Truck').Truck), on='Truck')
+truck_types = pd.merge(truck_types, pd.DataFrame(
+    location_data.drop_duplicates('Truck').Truck), on='Truck')
 
 
 ##############################
@@ -167,7 +174,8 @@ truck_types = pd.merge(truck_types,
 states = locations_w_states.State.drop_duplicates()
 
 # Create probabilities
-probabilities = find_probabilities(locations_w_states=locations_w_states, state_variables=state_variables)
+probabilities = find_probabilities(
+    locations_w_states=locations_w_states, state_variables=state_variables)
 
 """
 # Examine results (note that an other location has been added for a total of 9 locations)
@@ -199,7 +207,8 @@ probabilities = find_probabilities(locations_w_states=locations_w_states, state_
   temp.describe()
 
 # View probabilities
-  probabilities = find_probabilities(locations_w_states=locations_w_states, state_variables=state_variables)
+  probabilities = find_probabilities(
+    locations_w_states=locations_w_states, state_variables=state_variables)
   pylab
   pd.options.display.mpl_style = 'default'
   probabilities.hist()
@@ -218,9 +227,9 @@ results = pd.DataFrame()
 for x in xrange(1):
 
     # Run stage one (i.e. perform simulation)!
-    g = build_g(states=states, probabilities=probabilities, periods=2, discount=.99, 
+    g = build_g(states=states, probabilities=probabilities, periods=1, discount=.99,
                 state_variables=state_variables,
-                N=1, truck_types=truck_types, num_draws=2)
+                N=1, truck_types=truck_types, num_draws=1)
 
     # Run stage two (i.e. optimize)!
     (res, variables) = optimize(g)
@@ -237,7 +246,7 @@ results = results.reset_index().drop(['index'], axis=1)
 results = results.applymap(float)
 results.to_csv('results.csv')
 print results
-
+print results.describe().transpose().sort()[['mean', 'std']].to_latex()
 
 ##############################
 ##        Visualize         ##

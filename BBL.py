@@ -1,5 +1,17 @@
-# Eliot Abrams
-# Food truck location choice
+#!/usr/bin/env python
+
+"""
+BBL.py: Code sets up the BBL environment for a simulation involving 
+the locations of Chicago food trucks
+"""
+
+__author__ = 'Eliot Abrams'
+__copyright__ = "Copyright (C) 2015 Eliot Abrams"
+__license__ = "MIT"
+__version__ = "1.0.0"
+__email__ = "eabrams@uchicago.edu"
+__status__ = "Production"
+
 
 # Code sets up the BBL environment
 
@@ -185,8 +197,10 @@ def extract_sub_state(state, truck, state_variables):
 
     df = pd.DataFrame([state]).applymap(int)
     df.columns = state_variables
-    temp = list(locations.columns + truck) + list('Count' + locations.columns) \
-        + list('Num_Unique' + locations.columns) + ['Quarter', 'Day_Of_Week']
+    count = 'Count'
+    temp = list(locations.columns.values + truck) + list('Count' + locations.columns.values) \
+        + list('Num_Unique' + locations.columns.values) + \
+        ['Quarter', 'Day_Of_Week']
     sub_state = df[temp].values.tolist()
     return str(sub_state[0])
 
@@ -377,7 +391,8 @@ def update_state(state, action_sequence, Date, state_variables, truck_types):
     # we're keeping track of
     if pd.DatetimeIndex([Date])[0].dayofweek == 0:
         (Values, Labels) = make_states(location_data=action_sequence,
-                                       making_probabilities=False, truck_types=truck_types)
+                                       making_probabilities=False,
+                                       truck_types=truck_types)
 
         Content = pd.DataFrame([Values.State[0]])
         Content.columns = Labels
@@ -441,18 +456,22 @@ def simulate_single_path(probabilities, starting_state, starting_date, periods, 
         actions['Date'] = dt.datetime.strftime(current_date, '%Y-%m-%d')
 
         # Create the profit vector and add to the discounted sum of profits
-        period_profits = create_profit_vector(state_variables=state_variables, state=current_state,
-                                              actions=actions, truck_types=truck_types)
+        period_profits = create_profit_vector(state_variables=state_variables,
+                                              state=current_state,
+                                              actions=actions,
+                                              truck_types=truck_types)
         pdv_profits += discount ** T * period_profits.Profit
 
         # Update state (appending current actions to action sequence)
         actions = actions.drop(['Shock'], axis=1)
         action_sequence = action_sequence.append(actions)
 
-        (current_state, action_sequence) = update_state(state=current_state, action_sequence=action_sequence,
+        (current_state, action_sequence) = update_state(state=current_state,
+                                                        action_sequence=action_sequence,
                                                         Date=dt.datetime.strftime(
                                                             current_date, '%Y-%m-%d'),
-                                                        state_variables=state_variables, truck_types=truck_types)
+                                                        state_variables=state_variables,
+                                                        truck_types=truck_types)
 
         # Update counters
         T += 1
@@ -472,10 +491,16 @@ def find_value_function(probabilities, starting_state, starting_date, periods, d
 
     # Run N times
     for x in xrange(N):
-        Results = simulate_single_path(probabilities=probabilities, starting_state=starting_state,
-                                       starting_date=starting_date, periods=periods, discount=discount,
-                                       state_variables=state_variables, truck_id=truck_id, action_generator=action_generator,
-                                       specific_action=specific_action, truck_types=truck_types)
+        Results = simulate_single_path(probabilities=probabilities,
+                                       starting_state=starting_state,
+                                       starting_date=starting_date,
+                                       periods=periods,
+                                       discount=discount,
+                                       state_variables=state_variables,
+                                       truck_id=truck_id,
+                                       action_generator=action_generator,
+                                       specific_action=specific_action,
+                                       truck_types=truck_types)
 
         value_functions += 1. / N * Results.Profit
 
