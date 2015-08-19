@@ -1,5 +1,16 @@
-# Eliot Abrams
-# Food truck location choice
+#!/usr/bin/env python
+
+"""
+scrapelocations.py: Scraps the Weekly Schedule hosted by
+Chicago Food Truck Finder for food truck parking records
+"""
+
+__author__ = 'Eliot Abrams'
+__copyright__ = "Copyright (C) 2015 Eliot Abrams"
+__license__ = "MIT"
+__version__ = "1.0.0"
+__email__ = "eabrams@uchicago.edu"
+__status__ = "Production"
 
 # Packages
 import urllib2

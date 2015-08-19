@@ -3,6 +3,7 @@
 """
 simulate.py: Imports the BBL module and uses the commands therein 
 to run a BBL simulation on location data of Chicago Food Trucks
+Returns an element of g(E_{ia})
 """
 
 __author__ = 'Eliot Abrams'
@@ -22,6 +23,8 @@ os.chdir('/Users/eliotabrams/Desktop/BBL')
 # Import packages and force re-creation of module
 import BBL
 import ast
+import multiprocessing as mp
+
 reload(BBL)
 from BBL import *
 
@@ -36,6 +39,7 @@ truck_types = pd.read_csv('final_truck_types.csv', index_col=0)
 state_variables = pd.read_csv('state_variables.csv', index_col=0)
 state_variables = state_variables['0'].tolist()
 
+
 # Estimate the coefficients and their standard errors
 # Periods controls the number of days the simulation runs for.
 # N controls the number of simluated paths that go into creating
@@ -46,14 +50,21 @@ state_variables = state_variables['0'].tolist()
 # But need much more computing power to run.
 # Try setting xrange = 1, periods = 10, N=1, and num_draws=20 to begin.
 
-# Run stage one (i.e. perform simulation)!
+# Stage 1
 g = build_g(states=states, 
             probabilities=probabilities, 
-            periods=2, 
+            periods=40, 
             discount=.99,
             state_variables=state_variables,
-            N=2,
+            N=5,
             truck_types=truck_types, 
-            num_draws=2)
+            num_draws=5)
 
-print g.transpose()
+g = g.reset_index()
+print g.g[0]
+print g.g[1] 
+print g.g[2] 
+print g.g[3] 
+print g.g[4] 
+
+

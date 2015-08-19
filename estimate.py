@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 
 """
-simulate.py: Imports the BBL module and uses the commands therein 
-to run a BBL simulation on location data of Chicago Food Trucks
+estimate.py: Uses the g(E_{ia}) terms created by simulate.py to 
+estimate the parameters of the value function.
 """
 
 __author__ = 'Eliot Abrams'
@@ -28,12 +28,24 @@ from BBL import *
 np.random.seed(1234)
 
 
+
 ##############################
-##         Simulate         ##
+##         Estimate         ##
 ##############################
 
-# Read in data
-print g.g
+print(open('s1.csv').read())
+
+# Import the data
+g = pd.DataFrame()
+for x in xrange(8):
+    lines = pd.read_csv('s' + str(x+1)+'.csv', skip_blank_lines=True, header=None)
+    g = g.append(lines)
+g.columns = ['g']
+g = g.reset_index().drop('index', axis=1)
+g.g = g.g.apply(lambda row: sp.sympify(row))
+
+# Store
+g.to_csv('g.csv')
 
 # Get the point estimate
 (res, variables) = optimize(g)
@@ -47,7 +59,7 @@ print results.transpose()
 # Bootstrap the SEs
 bootstrap_results = pd.DataFrame()
 for x in xrange(10):
-    g_bootstrap_sample = g.iloc[np.random.randint(0, len(g), size=50)]
+    g_bootstrap_sample = g.iloc[np.random.randint(0, len(g), size=40)]
     (res, variables) = optimize(g_bootstrap_sample)
     coefs = list(res.x)
     coefs.append(res.success)

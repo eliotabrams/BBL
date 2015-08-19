@@ -1,8 +1,10 @@
 #!/usr/bin/env python
 
 """
-foodtrucks.py: Imports the BBL module and uses the commands therein 
-to run a BBL simulation on location data of Chicago Food Trucks
+createdata.py: Imports the raw list of food truck parking locations and outputs
+the variables and datasets needed for the simulation. Namely the observed states,
+the state variables, and the probabilities that trucks take actions conditional on
+the sub-states.
 """
 
 __author__ = 'Eliot Abrams'
@@ -80,13 +82,6 @@ location_data = location_data[location_data.Location != 'Schaumburg Area']
 location_data = location_data[location_data.Location !=
                               '1815 South Meyers Road, Oakbrook Terrace, IL']
 
-"""
-# Summary statistics
-print len(location_data)
-print len(location_data.groupby('Truck').Truck.count())
-print len(location_data.groupby('Location').Truck.count())
-"""
-
 # Drop non-lunch parkings (note that time is converted to 24 hour clock)
 location_data['Start_Time'] = location_data.Start_Time.apply(
     lambda x: dt.datetime.strptime(x, '%I:%M %p'))
@@ -106,7 +101,7 @@ print len(location_data.groupby('Truck').Truck.count())
 print len(location_data.groupby('Location').Truck.count())
 """
 
-# Drop rare locations and clean remaining locaiton names
+# Drop rare locations
 # Parkings here will then later get lumped into an other category
 # I particularly want to exclude Daley Plaza as it only opens
 # for lunch service on one day a week (and the day cycles)
@@ -125,25 +120,39 @@ print len(location_data.groupby('Truck').Truck.count())
 print len(location_data.groupby('Location').Truck.count())
 temp = location_data.groupby('Location').Truck.count()
 temp.sort()
-print temp
+temp = pd.DataFrame(temp)
+temp = temp.reset_index('Location')
+temp.columns = ['Location', 'Parkings']
+print temp.to_latex(index=False)
 """
 
 """
 # Create tables!
 table = location_data[(location_data.Truck == "Jack's Fork in the Road")
                       | (location_data.Truck == "La Boulangerie")
-                      | (location_data.Truck == "The Fat Shallot")
-                      | (location_data.Truck == "The Jibarito Stop")]
-
-table = location_data.pivot(index='Date', columns='Truck', 
-                    values='Location').tail(31).to_csv('last_month.csv')
+                      | (location_data.Truck == "The Fat Shallot")]
+table = table.pivot(index='Date', columns='Truck', 
+                    values='Location').tail(15)
+table = table.reset_index('Date')
+table.Date = pd.to_datetime(table.Date)
+table.Date = table.Date.apply(lambda x: x.strftime('%a, %b %d '))
+print table.to_latex(index=False)
 
 table = location_data.groupby('Truck').Truck.count()
 table = pd.DataFrame([table]).transpose()
 table.columns = ['Parkings']
 table.reset_index(level=0, inplace=True)
 table = pd.merge(table, truck_types, on='Truck')
-table.to_csv('trucks.csv')
+table = table[['Truck','Type', 'Parkings']]
+print table.to_latex(index=False)
+
+table = location_data[location_data.Location=='University of Chicago']
+table = table[table.Date >= '2015-07-30']
+table.sort(['Truck', 'Date'])
+table = table.pivot(index='Truck', columns='Date', 
+                    values='Location')
+table = table.unstack()
+table = table[table == 'University of Chicago']
 """
 
 # Clean the location names
