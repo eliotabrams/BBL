@@ -33,8 +33,6 @@ np.random.seed(1234)
 ##         Estimate         ##
 ##############################
 
-print(open('s1.csv').read())
-
 # Import the data
 g = pd.DataFrame()
 for x in xrange(8):
@@ -71,6 +69,7 @@ bootstrap_results.columns = variables
 bootstrap_results = bootstrap_results.reset_index().drop(['index'], axis=1)
 bootstrap_results = bootstrap_results.applymap(float)
 print bootstrap_results.describe().transpose()
+print bootstrap_results.describe().transpose().sort()[['mean', 'std']]
 print bootstrap_results.describe().transpose().sort()[['mean', 'std']].to_latex()
 
 ##############################
