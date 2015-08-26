@@ -26,9 +26,6 @@ import BBL
 reload(BBL)
 from BBL import *
 
-# Set seed
-np.random.seed(1234)
-
 
 ##############################
 ## Clean and report on data ##
@@ -160,7 +157,7 @@ location_data.Location = location_data.Location.str.replace(' ', '')
 location_data.Location = location_data.Location.str.replace('600', '')
 location_data.Location = location_data.Location.str.replace('450N.', '')
 
-# Complete panel if making probabilities (else complete by construction)
+# Complete panel
 location_data = location_data.pivot(
     index='Date', columns='Truck', values='Location')
 location_data = location_data.unstack().reset_index(
@@ -177,6 +174,10 @@ truck_types.to_csv('final_truck_types.csv')
 ##############################
 ##      Create Data         ##
 ##############################
+
+# Bootstrap data
+location_data = location_data.iloc[
+    np.random.randint(0, len(location_data), size=len(location_data))]
 
 # Create states
 (locations_w_states, state_variables) = make_states(

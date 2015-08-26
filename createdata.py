@@ -26,9 +26,6 @@ import BBL
 reload(BBL)
 from BBL import *
 
-# Set seed
-np.random.seed(1234)
-
 
 ##############################
 ## Clean and report on data ##

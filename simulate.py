@@ -28,6 +28,8 @@ import multiprocessing as mp
 reload(BBL)
 from BBL import *
 
+
+
 ##############################
 ##         Simulate         ##
 ##############################
@@ -53,14 +55,16 @@ state_variables = state_variables['0'].tolist()
 # Stage 1
 g = build_g(states=states, 
             probabilities=probabilities, 
-            periods=2, 
+            periods=130, 
             discount=.99,
             state_variables=state_variables,
-            N=2,
+            N=20,
             truck_types=truck_types, 
-            num_draws=1)
+            num_draws=2)
 
 g = g.reset_index()
 print g.g[0]
+print g.g[1]
+
 
 

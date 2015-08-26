@@ -520,7 +520,7 @@ def build_g(states, probabilities, periods, discount, state_variables, N, truck_
     container_table = truck_types.drop('Type', axis=1)
 
     # Interact trucks with alternative strategies being considered
-    temp1 = pd.DataFrame(['Random'], columns=['action_generator'])
+    temp1 = pd.DataFrame(['Random', 'Random', 'Random', 'Random', 'Random', 'Random', 'Random', 'Random'], columns=['action_generator'])
     temp2 = pd.DataFrame(list(locations.columns), columns=['specific_action'])
     temp2['action_generator'] = 'Specific'
     temp2 = temp2.append(temp1)
