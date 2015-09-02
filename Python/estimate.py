@@ -15,14 +15,15 @@ __status__ = "Production"
 
 """
 # Run BBL script to setup environment and declare functions
-import os
-os.chdir('/Users/eliotabrams/Desktop/BBL')
 """
 
 # Import packages and force re-creation of module
 import BBL
 reload(BBL)
 from BBL import *
+import os
+os.chdir('/home/eabrams0/run0')
+
 
 
 ##############################
@@ -31,7 +32,7 @@ from BBL import *
 
 # Import the data
 g = pd.DataFrame()
-for x in xrange(100):
+for x in xrange(50):
     lines = pd.read_csv('s' + str(x+1)+'.csv', skip_blank_lines=True, header=None)
     g = g.append(lines)
 g.columns = ['g']

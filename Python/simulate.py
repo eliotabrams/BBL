@@ -55,16 +55,16 @@ state_variables = state_variables['0'].tolist()
 # Stage 1
 g = build_g(states=states, 
             probabilities=probabilities, 
-            periods=130, 
+            periods=30, 
             discount=.99,
             state_variables=state_variables,
-            N=20,
+            N=1,
             truck_types=truck_types, 
-            num_draws=2)
+            num_draws=1)
 
 g = g.reset_index()
-print g.g[0]
-print g.g[1]
+print g
+
 
 
 

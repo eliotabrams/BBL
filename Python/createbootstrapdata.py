@@ -175,10 +175,6 @@ truck_types.to_csv('final_truck_types.csv')
 ##      Create Data         ##
 ##############################
 
-# Bootstrap data
-location_data = location_data.iloc[
-    np.random.randint(0, len(location_data), size=len(location_data))]
-
 # Create states
 (locations_w_states, state_variables) = make_states(
     location_data=location_data, making_probabilities=True, truck_types=truck_types)
@@ -186,6 +182,10 @@ states = locations_w_states.State.drop_duplicates()
 pd.DataFrame(states).to_csv('states.csv')
 pd.DataFrame(state_variables).to_csv('state_variables.csv')
 
+# Bootstrap data
+locations_w_states = locations_w_states.iloc[
+    np.random.randint(0, len(locations_w_states), size=len(locations_w_states))]
+    
 # Create probabilities
 probabilities = find_probabilities(
     locations_w_states=locations_w_states, state_variables=state_variables)
